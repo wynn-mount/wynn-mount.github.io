@@ -8,11 +8,17 @@ import { BulkImportExportModal } from './components/BulkImportExportModal'
 import { FeedKanbanBoard } from './components/FeedKanbanBoard'
 import { LiveStatChart } from './components/LiveStatChart'
 import { Package } from 'lucide-react'
+import { useKanbanMonitor } from './hooks/useKanbanMonitor'
+import { useKanbanSync } from './hooks/useKanbanSync'
 
 function App() {
   const isAppReady = useAtomValue(isAppReadyAtom)
   const setIsBulkModalOpen = useSetAtom(isBulkModalOpenAtom)
   const [activeTab, setActiveTab] = useState<'calculator' | 'matrix'>('calculator')
+
+  // Register the global kanban monitor and sync logic
+  useKanbanMonitor()
+  useKanbanSync()
 
   return (
     <div className="flex flex-col min-h-screen bg-black text-white">
@@ -73,12 +79,12 @@ function App() {
             <div className="h-64 bg-neutral-900 w-full rounded"></div>
           </div>
         ) : (
-          <div className="max-w-[1800px] mx-auto h-full">
+          <div className="max-w-full mx-auto h-full px-4">
             <main className="h-full">
               {activeTab === 'calculator' ? (
-                <div className="flex flex-col lg:flex-row gap-8 items-start h-full">
-                  {/* Left Column: Mount Configuration & Material List */}
-                  <div className="flex-1 flex flex-col gap-8 order-1 lg:order-1 w-full lg:w-1/2">
+                <div className="flex flex-row flex-wrap xl:flex-nowrap gap-8 items-start h-full">
+                  {/* Left Column: Mount Configuration & Material List (Equally split) */}
+                  <div className="flex-1 flex flex-col gap-8 order-1 xl:order-1 w-full min-w-[500px]">
                     <div className="min-h-0">
                       <BentoMountManager />
                     </div>
@@ -87,14 +93,21 @@ function App() {
                     </div>
                   </div>
                   
-                  {/* Right Column: Live Stat Progress & Feeding Kanban */}
-                  <div className="flex-1 flex flex-col gap-8 order-2 lg:order-2 w-full lg:w-1/2 self-stretch">
+                  {/* Center Column: Live Stat Progress & Feeding Kanban (Equally split) */}
+                  <div className="flex-1 flex flex-col gap-8 order-2 xl:order-2 w-full self-stretch min-w-[800px]">
                     <div className="min-h-0">
                       <LiveStatChart />
                     </div>
-                    {/* Kanban Board takes up remaining space */}
+                    {/* Core Kanban Sections - Optimized to fit equally */}
                     <div className="min-h-0 flex-1">
-                      <FeedKanbanBoard />
+                      <FeedKanbanBoard columnIds={['inventory', 'feeder', 'consumed']} />
+                    </div>
+                  </div>
+
+                  {/* Right Column: Stash Section (Fixed Width) */}
+                  <div className="flex-none order-3 xl:order-3 w-full xl:w-[450px] self-stretch">
+                    <div className="min-h-0 h-full">
+                      <FeedKanbanBoard columnIds={['stash']} />
                     </div>
                   </div>
                 </div>

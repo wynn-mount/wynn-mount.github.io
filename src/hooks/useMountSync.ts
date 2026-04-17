@@ -32,7 +32,7 @@ export function useMountSync() {
     window.history.pushState({}, '', url.toString());
   };
 
-  // Initialize DB data on mount
+  // 1. Initialize DB data on mount
   useEffect(() => {
     let mounted = true;
     const init = async () => {
@@ -47,7 +47,6 @@ export function useMountSync() {
       } else {
         setMountsList(mounts);
         
-        // 1. Try to get ID from URL
         const urlParams = new URLSearchParams(window.location.search);
         const urlMountId = urlParams.get('mountId');
         
@@ -55,7 +54,6 @@ export function useMountSync() {
           active = mounts.find(m => m.id === parseInt(urlMountId, 10));
         }
         
-        // 2. Try localStorage if URL fails
         if (!active) {
           const lastActiveId = localStorage.getItem('lastActiveMountId');
           if (lastActiveId) {
@@ -63,7 +61,6 @@ export function useMountSync() {
           }
         }
         
-        // 3. Fallback to first mount
         if (!active) {
           active = mounts[0];
         }
@@ -80,7 +77,16 @@ export function useMountSync() {
     return () => { mounted = false; };
   }, [setIsAppReady, setMountsList, setActiveMountId, setCurrentLevel, setMountStats]);
 
-  // Sync to DB when form data changes (auto-save)
+  // 2. OPTIMISTIC UI SYNC: Keep the list in sync with atoms INSTANTLY
+  useEffect(() => {
+    if (!isAppReady || !activeMountId) return;
+
+    setMountsList((prev) => 
+      prev.map(m => m.id === activeMountId ? { ...m, currentLevel, stats: mountStats } : m)
+    );
+  }, [currentLevel, mountStats, activeMountId, isAppReady, setMountsList]);
+
+  // 3. PERSISTENCE SYNC: Debounced DB write
   useEffect(() => {
     if (!isAppReady || !activeMountId) return;
 
@@ -88,16 +94,11 @@ export function useMountSync() {
       updateMount(activeMountId, {
         currentLevel,
         stats: mountStats,
-      }).then(() => {
-        // Also update the mount in the list so the UI stays in sync if needed
-        setMountsList((prev) => 
-          prev.map(m => m.id === activeMountId ? { ...m, currentLevel, stats: mountStats } : m)
-        );
       });
-    }, 500); // 500ms debounce
+    }, 1000); // Debounce DB writes slightly more for performance
 
     return () => clearTimeout(timer);
-  }, [currentLevel, mountStats, activeMountId, isAppReady, setMountsList]);
+  }, [currentLevel, mountStats, activeMountId, isAppReady]);
 
   const switchMount = (id: number) => {
     const target = mountsList.find(m => m.id === id);
@@ -145,7 +146,6 @@ export function useMountSync() {
       prev.map(m => m.id === id ? { ...m, ...changes } : m)
     );
 
-    // If we're updating the currently active mount, sync the active atoms too
     if (id === activeMountId) {
       if (changes.currentLevel !== undefined) setCurrentLevel(changes.currentLevel);
       if (changes.stats !== undefined) setMountStats(changes.stats);
@@ -160,7 +160,6 @@ export function useMountSync() {
     }
   };
 
-  // Listen for browser back/forward navigation
   useEffect(() => {
     const handlePopState = () => {
       const urlParams = new URLSearchParams(window.location.search);

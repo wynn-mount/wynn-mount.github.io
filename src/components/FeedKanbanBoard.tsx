@@ -1,23 +1,30 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAtom, useSetAtom, useAtomValue } from 'jotai';
-import { draggable, dropTargetForElements, monitorForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
+import { draggable, dropTargetForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
 import { combine } from '@atlaskit/pragmatic-drag-and-drop/combine';
 import { attachClosestEdge, extractClosestEdge, type Edge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge';
-import { X, Layers, ChevronDown, ChevronRight } from 'lucide-react';
-import { MaterialType, ColumnId, ColumnData, FeedingItem, KanbanItem, KanbanGroup } from '../types';
-import { getMaterialName } from '../lib/constants';
+import { X, Layers, ChevronDown, ChevronRight, Archive, CheckCircle } from 'lucide-react';
+import { MaterialType, ColumnId, ColumnData, FeedingItem, KanbanItem, KanbanGroup, StatName } from '../types';
+import { getMaterialName, STAT_NAMES } from '../lib/constants';
 import { Icon } from './Icon';
 import { EditableText } from './EditableText';
-import { kanbanDataAtom, selectedItemIdsAtom, lastSelectedIdAtom, selectedColumnIdAtom, interactionStateAtom, flattenItems } from '../store/feedingStore';
-import { useKanbanSync } from '../hooks/useKanbanSync';
+import { kanbanDataAtom, selectedItemIdsAtom, lastSelectedIdAtom, selectedColumnIdAtom, interactionStateAtom, flattenItems, isKanbanReadyAtom } from '../store/feedingStore';
+import { activeMatrixDataAtom } from '../store/matrixStore';
+import { mountStatsAtom } from '../store/mountStore';
 
-export function FeedKanbanBoard() {
-  const { isReady } = useKanbanSync();
+interface KanbanBoardProps {
+  columnIds?: ColumnId[];
+}
+
+export function FeedKanbanBoard({ columnIds = ['inventory', 'feeder', 'consumed'] }: KanbanBoardProps) {
+  const isReady = useAtomValue(isKanbanReadyAtom);
   const [data, setData] = useAtom(kanbanDataAtom);
   const [selectedItemIds, setSelectedItemIds] = useAtom(selectedItemIdsAtom);
   const [lastSelectedId, setLastSelectedId] = useAtom(lastSelectedIdAtom);
   const [selectedColumnId, setSelectedColumnId] = useAtom(selectedColumnIdAtom);
   const setInteraction = useSetAtom(interactionStateAtom);
+  const matrixData = useAtomValue(activeMatrixDataAtom);
+  const setMountStats = useSetAtom(mountStatsAtom);
 
   const clearSelection = useCallback(() => {
     setSelectedItemIds([]);
@@ -90,7 +97,7 @@ export function FeedKanbanBoard() {
   }, [setData]);
 
   const removeItems = useCallback((ids: string[], columnId: ColumnId) => {
-    if (columnId !== 'inventory') return;
+    if (columnId !== 'inventory' && columnId !== 'stash') return;
 
     setData((prev) => ({
       ...prev,
@@ -119,9 +126,9 @@ export function FeedKanbanBoard() {
         return;
       }
 
-      if ((e.key === 'Backspace' || e.key === 'Delete') && selectedColumnId === 'inventory' && selectedItemIds.length > 0) {
+      if ((e.key === 'Backspace' || e.key === 'Delete') && (selectedColumnId === 'inventory' || selectedColumnId === 'stash') && selectedItemIds.length > 0) {
         e.preventDefault();
-        removeItems(selectedItemIds, 'inventory');
+        removeItems(selectedItemIds, selectedColumnId);
       }
     };
 
@@ -129,109 +136,73 @@ export function FeedKanbanBoard() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedColumnId, selectedItemIds, removeItems]);
 
-  useEffect(() => {
-    return monitorForElements({
-      onDrop({ source, location }) {
-        const destination = location.current.dropTargets[0];
-        if (!destination) return;
+  const handleMoveToStash = useCallback((item: KanbanItem, sourceColumnId: ColumnId) => {
+    if (sourceColumnId === 'stash') return;
 
-        const draggedItemIds = source.data.draggedItemIds as string[];
-        const sourceColumnId = source.data.columnId as ColumnId;
-        const sourceItemId = source.data.id as string;
+    const idsToMove = 'type' in item && item.type === 'group' ? item.items.map(i => i.id) : [item.id];
+    const flatItems = flattenItems(data[sourceColumnId].items);
+    const movedFeedingItems = flatItems.filter(i => idsToMove.includes(i.id));
 
-        const destinationItemData = location.current.dropTargets.find((t) => t.data.type === 'item')?.data;
-        const destinationColumnData = location.current.dropTargets.find((t) => t.data.type === 'column')?.data;
+    // 1. Calculate and update stats optimistically
+    const totals = STAT_NAMES.reduce((acc, stat) => {
+      acc[stat] = 0;
+      return acc;
+    }, {} as Record<StatName, number>);
 
-        if (!destinationColumnData) return;
-
-        const destinationColumnId = destinationColumnData.columnId as ColumnId;
-
-        setData((prev) => {
-          const nextData = {
-            inventory: { ...prev.inventory, items: [...prev.inventory.items] },
-            feeder: { ...prev.feeder, items: [...prev.feeder.items] },
-            consumed: { ...prev.consumed, items: [...prev.consumed.items] },
-          };
-
-          // 1. Extract moved FeedingItems
-          const allSourceFlatItems = flattenItems(prev[sourceColumnId].items);
-          const movedFeedingItems = allSourceFlatItems.filter(item => draggedItemIds.includes(item.id));
-
-          // 2. Remove dragged items from all columns (surgically)
-          for (const colId in nextData) {
-            const cId = colId as ColumnId;
-            nextData[cId].items = nextData[cId].items.map(item => {
-              if ('type' in item && item.type === 'group') {
-                return { ...item, items: item.items.filter(i => !draggedItemIds.includes(i.id)) };
-              }
-              return item;
-            }).filter(item => {
-              if ('type' in item && item.type === 'group') return item.items.length > 0;
-              return !draggedItemIds.includes(item.id);
-            }) as KanbanItem[];
-          }
-
-          const destItems = nextData[destinationColumnId].items;
-          const isGroupTarget = destinationItemData?.isGroupTarget as boolean | undefined;
-
-          // 3. GROUPING LOGIC (Dropped on header center or expanded content area)
-          if (isGroupTarget && destinationItemData) {
-            const destId = destinationItemData.id as string;
-            // Prevent grouping with self
-            if (!draggedItemIds.includes(destId)) {
-              const targetIdx = destItems.findIndex(i => i.id === destId);
-              if (targetIdx !== -1) {
-                const targetItem = destItems[targetIdx];
-                if ('type' in targetItem && targetItem.type === 'group') {
-                  destItems[targetIdx] = {
-                    ...targetItem,
-                    items: [...targetItem.items, ...movedFeedingItems]
-                  };
-                } else {
-                  destItems[targetIdx] = {
-                    id: crypto.randomUUID(),
-                    type: 'group',
-                    items: [targetItem as FeedingItem, ...movedFeedingItems]
-                  };
-                }
-                return nextData;
-              }
-            }
-          }
-
-          // 4. REORDERING / MOVING LOGIC
-          const edge = destinationItemData ? extractClosestEdge(destinationItemData) : null;
-          let insertIndex = destItems.length;
-          
-          if (destinationItemData) {
-            const destId = destinationItemData.id as string;
-            const relativeDestIndex = destItems.findIndex((item) => item.id === destId);
-            if (relativeDestIndex !== -1) {
-              insertIndex = edge === 'bottom' ? relativeDestIndex + 1 : relativeDestIndex;
-            }
-          }
-
-          // Handle extraction from group or moving a whole group
-          const originalItem = prev[sourceColumnId].items.find(i => i.id === sourceItemId);
-          if (originalItem && 'type' in originalItem && originalItem.type === 'group') {
-             const isFullGroupDrag = draggedItemIds.length === originalItem.items.length;
-             if (isFullGroupDrag) {
-                destItems.splice(insertIndex, 0, { ...originalItem, items: movedFeedingItems });
-             } else {
-                destItems.splice(insertIndex, 0, ...movedFeedingItems);
-             }
-          } else {
-             destItems.splice(insertIndex, 0, ...movedFeedingItems);
-          }
-
-          return nextData;
+    movedFeedingItems.forEach((mat) => {
+      const yields = matrixData[mat.level.toString()]?.[mat.type];
+      if (yields) {
+        STAT_NAMES.forEach((stat) => {
+          totals[stat] += yields[stat] || 0;
         });
-
-        setSelectedColumnId(destinationColumnId);
-        setInteraction({ items: [], columnId: null, type: null });
-      },
+      }
     });
-  }, [setData, setSelectedColumnId, setInteraction]);
+
+    setMountStats((prev) => {
+      const next = { ...prev };
+      STAT_NAMES.forEach((stat) => {
+        next[stat] = {
+          ...next[stat],
+          limitLevel: next[stat].limitLevel + totals[stat]
+        };
+      });
+      return next;
+    });
+
+    // 2. Update Kanban data
+    setData((prev) => {
+      const nextData = {
+        inventory: { ...prev.inventory, items: [...prev.inventory.items] },
+        feeder: { ...prev.feeder, items: [...prev.feeder.items] },
+        consumed: { ...prev.consumed, items: [...prev.consumed.items] },
+        stash: { ...prev.stash, items: [...prev.stash.items] },
+      };
+
+      for (const colId in nextData) {
+        const cId = colId as ColumnId;
+        nextData[cId].items = nextData[cId].items.map((it: KanbanItem) => {
+          if ('type' in it && it.type === 'group') {
+            return { ...it, items: it.items.filter(i => !idsToMove.includes(i.id)) };
+          }
+          return it;
+        }).filter((it: KanbanItem) => {
+          if ('type' in it && it.type === 'group') return it.items.length > 0;
+          return !idsToMove.includes(it.id);
+        });
+      }
+
+      const now = Date.now();
+      const stashedItems = movedFeedingItems.map(i => ({ ...i, stashedAt: now }));
+      
+      if ('type' in item && item.type === 'group') {
+        nextData.stash.items.unshift({ ...item, items: stashedItems, stashedAt: now });
+      } else {
+        nextData.stash.items.unshift(...stashedItems);
+      }
+
+      return nextData;
+    });
+  }, [setData, data, matrixData, setMountStats]);
 
   if (!isReady) {
     return (
@@ -244,30 +215,38 @@ export function FeedKanbanBoard() {
 
   return (
     <div 
-      className="flex gap-6 h-full p-2 overflow-x-auto"
+      className="flex gap-6 h-full w-full overflow-x-auto"
       onClick={clearSelection}
     >
-      {(['inventory', 'feeder', 'consumed'] as ColumnId[]).map((id) => (
-        <Column 
-          key={id} 
-          column={data[id]} 
-          selectedItemIds={selectedItemIds}
-          onItemClick={handleItemClick}
-          onRemove={(ids) => removeItems(ids, id)}
-          onRenameGroup={handleRenameGroup}
-          onStartDrag={(item) => {
-            const itemIds = 'type' in item && item.type === 'group' ? item.items.map(i => i.id) : [item.id];
-            const alreadySelected = itemIds.every(id => selectedItemIds.includes(id));
-            if (!alreadySelected) {
-               setSelectedItemIds(itemIds);
-               setSelectedColumnId(id);
-               setLastSelectedId(item.id);
-               const feedingItems = 'type' in item && item.type === 'group' ? item.items : [item as FeedingItem];
-               setInteraction({ items: feedingItems, columnId: id, type: 'select' });
-            }
-          }}
-        />
-      ))}
+      {columnIds.filter(id => !!data[id]).map((id) => {
+        let items = data[id].items;
+        if (id === 'stash') {
+          items = [...items].sort((a, b) => (b.stashedAt || 0) - (a.stashedAt || 0));
+        }
+
+        return (
+          <Column 
+            key={id} 
+            column={{ ...data[id], items }} 
+            selectedItemIds={selectedItemIds}
+            onItemClick={handleItemClick}
+            onRemove={(ids) => removeItems(ids, id)}
+            onRenameGroup={handleRenameGroup}
+            onMoveToStash={(item) => handleMoveToStash(item, id)}
+            onStartDrag={(item) => {
+              const itemIds = 'type' in item && item.type === 'group' ? item.items.map(i => i.id) : [item.id];
+              const alreadySelected = itemIds.every(id => selectedItemIds.includes(id));
+              if (!alreadySelected) {
+                 setSelectedItemIds(itemIds);
+                 setSelectedColumnId(id);
+                 setLastSelectedId(item.id);
+                 const feedingItems = 'type' in item && item.type === 'group' ? item.items : [item as FeedingItem];
+                 setInteraction({ items: feedingItems, columnId: id, type: 'select' });
+              }
+            }}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -279,9 +258,10 @@ interface ColumnProps {
   onRemove: (ids: string[]) => void;
   onRenameGroup: (groupId: string, newName: string) => void;
   onStartDrag: (item: KanbanItem) => void;
+  onMoveToStash: (item: KanbanItem) => void;
 }
 
-function Column({ column, selectedItemIds, onItemClick, onRemove, onRenameGroup, onStartDrag }: ColumnProps) {
+function Column({ column, selectedItemIds, onItemClick, onRemove, onRenameGroup, onStartDrag, onMoveToStash }: ColumnProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [isDraggedOver, setIsDraggedOver] = useState(false);
 
@@ -301,7 +281,9 @@ function Column({ column, selectedItemIds, onItemClick, onRemove, onRenameGroup,
   return (
     <div
       ref={ref}
-      className={`flex flex-col w-80 bg-neutral-900/20 rounded-lg border border-neutral-800 transition-all duration-200 ${
+      className={`flex flex-col flex-shrink-0 bg-neutral-900/20 rounded-lg border border-neutral-800 transition-all duration-200 ${
+        column.id === 'stash' ? 'w-[450px]' : 'flex-1 min-w-[240px]'
+      } ${
         isDraggedOver ? 'border-white/30 bg-neutral-800/30 ring-1 ring-white/10 shadow-[0_0_20px_rgba(255,255,255,0.05)]' : ''
       }`}
     >
@@ -309,7 +291,8 @@ function Column({ column, selectedItemIds, onItemClick, onRemove, onRenameGroup,
         <div className="flex items-center gap-2">
           <div className={`w-1.5 h-4 rounded-full ${
             column.id === 'inventory' ? 'bg-blue-500' : 
-            column.id === 'feeder' ? 'bg-orange-500' : 'bg-green-500'
+            column.id === 'feeder' ? 'bg-orange-500' : 
+            column.id === 'consumed' ? 'bg-green-500' : 'bg-purple-500'
           }`} />
           <h3 className="text-xs font-bold uppercase tracking-widest text-white">
             {column.title}
@@ -340,6 +323,7 @@ function Column({ column, selectedItemIds, onItemClick, onRemove, onRenameGroup,
               onRemove={onRemove}
               onRenameGroup={onRenameGroup}
               onStartDrag={onStartDrag}
+              onMoveToStash={onMoveToStash}
             />
           ))
         )}
@@ -357,9 +341,10 @@ interface ItemProps {
   onRemove: (ids: string[]) => void;
   onRenameGroup: (groupId: string, newName: string) => void;
   onStartDrag: (item: KanbanItem) => void;
+  onMoveToStash: (item: KanbanItem) => void;
 }
 
-const DraggableItem = React.memo(({ item, columnId, isSelected, selectedItemIds, onItemClick, onRemove, onRenameGroup, onStartDrag }: ItemProps) => {
+const DraggableItem = React.memo(({ item, columnId, isSelected, selectedItemIds, onItemClick, onRemove, onRenameGroup, onStartDrag, onMoveToStash }: ItemProps) => {
   const headerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -396,20 +381,23 @@ const DraggableItem = React.memo(({ item, columnId, isSelected, selectedItemIds,
           const rect = element.getBoundingClientRect();
           const relativeY = input.clientY - rect.top;
           const height = rect.height;
-          // Middle 25% of the header
           const isGroupTarget = relativeY > height * 0.375 && relativeY < height * 0.625;
           const data = { type: 'item', id: item.id, columnId, isGroupTarget };
           if (isGroupTarget) return data;
+          
+          // Disable reordering indicators in Stash column
+          if (columnId === 'stash') return data;
+          
           return attachClosestEdge(data, { element, input, allowedEdges: ['top', 'bottom'] });
         },
         onDragEnter: (args) => {
            const data = args.self.data;
-           setClosestEdge(extractClosestEdge(data));
+           setClosestEdge(columnId === 'stash' ? null : extractClosestEdge(data));
            setIsGroupTarget(!!data.isGroupTarget);
         },
         onDrag: (args) => {
            const data = args.self.data;
-           setClosestEdge(extractClosestEdge(data));
+           setClosestEdge(columnId === 'stash' ? null : extractClosestEdge(data));
            setIsGroupTarget(!!data.isGroupTarget);
         },
         onDragLeave: () => {
@@ -426,7 +414,6 @@ const DraggableItem = React.memo(({ item, columnId, isSelected, selectedItemIds,
     return combine(...items);
   }, [item, columnId, isSelected, selectedItemIds, onStartDrag, isGroup]);
 
-  // Drop target for expanded content area
   useEffect(() => {
     if (!isGroup || !isExpanded) return;
     const el = contentRef.current;
@@ -440,6 +427,11 @@ const DraggableItem = React.memo(({ item, columnId, isSelected, selectedItemIds,
       onDrop: () => setIsContentDraggedOver(false),
     });
   }, [isGroup, isExpanded, item.id, columnId]);
+
+  const formatTime = (ts?: number) => {
+    if (!ts) return '';
+    return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  };
 
   if (isGroup) {
     const group = item as KanbanGroup;
@@ -458,25 +450,39 @@ const DraggableItem = React.memo(({ item, columnId, isSelected, selectedItemIds,
             isGroupTarget ? 'border-yellow-500 bg-yellow-500/10 scale-[1.02] ring-2 ring-yellow-500/50 shadow-[0_0_15px_rgba(234,179,8,0.3)]' : ''
           } group`}
         >
-          <div className="flex-1 flex items-center min-w-0 pr-2">
-            <EditableText 
-              value={group.name || 'Material Group'} 
-              onSave={(newName) => onRenameGroup(group.id, newName)}
-              className={`text-[11px] font-bold transition-colors ${
-                isSelected ? 'text-blue-200' : 'text-neutral-200 group-hover:text-white'
-              }`}
-            />
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+             {columnId !== 'stash' && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onMoveToStash(item); }}
+                  className="p-1 text-neutral-500 hover:text-purple-400 hover:bg-purple-950/20 rounded transition-all"
+                  title="Move to Stash"
+                >
+                  <Archive size={14} />
+                </button>
+             )}
+             <EditableText 
+                value={group.name || 'Material Group'} 
+                onSave={(newName) => onRenameGroup(group.id, newName)}
+                className={`text-[11px] font-bold transition-colors truncate ${
+                  isSelected ? 'text-blue-200' : 'text-neutral-200 group-hover:text-white'
+                }`}
+              />
           </div>
 
           <div className="flex items-center gap-2">
-            {columnId === 'inventory' && (
+            {columnId === 'stash' && group.stashedAt && (
+              <span className="text-[9px] font-mono text-purple-400/80 bg-purple-900/10 px-1.5 py-0.5 rounded border border-purple-500/20">
+                {formatTime(group.stashedAt)}
+              </span>
+            )}
+            {(columnId === 'inventory' || columnId === 'stash') && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   onRemove(groupItems.map(i => i.id));
                 }}
                 className="p-1 text-neutral-600 hover:text-red-400 hover:bg-red-950/20 rounded transition-all opacity-0 group-hover:opacity-100"
-                title="Remove from Inventory"
+                title="Remove"
               >
                 <X size={14} />
               </button>
@@ -514,7 +520,6 @@ const DraggableItem = React.memo(({ item, columnId, isSelected, selectedItemIds,
           </div>
         )}
 
-        {/* Global Reorder Indicators for the whole group block */}
         {closestEdge === 'top' && (
           <div className="absolute top-0 left-0 right-0 h-0.5 bg-blue-500 rounded-full -translate-y-1/2 pointer-events-none z-10 shadow-[0_0_8px_rgba(59,130,246,0.8)]" />
         )}
@@ -541,6 +546,16 @@ const DraggableItem = React.memo(({ item, columnId, isSelected, selectedItemIds,
           isGroupTarget ? 'border-yellow-500 bg-yellow-500/10 scale-[1.02] ring-2 ring-yellow-500/50 shadow-[0_0_15px_rgba(234,179,8,0.3)]' : ''
         } group`}
       >
+        {columnId !== 'stash' && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onMoveToStash(item); }}
+            className="p-1 text-neutral-500 hover:text-purple-400 hover:bg-purple-950/20 rounded transition-all"
+            title="Move to Stash"
+          >
+            <Archive size={14} />
+          </button>
+        )}
+
         <div className="relative">
           <div className="relative z-10">
             <Icon type={feedingItem.type} level={feedingItem.level} scale={0.8} className="rounded" />
@@ -568,18 +583,25 @@ const DraggableItem = React.memo(({ item, columnId, isSelected, selectedItemIds,
           </div>
         </div>
 
-        {columnId === 'inventory' && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onRemove([feedingItem.id]);
-            }}
-            className="p-1 text-neutral-600 hover:text-red-400 hover:bg-red-950/20 rounded transition-all opacity-0 group-hover:opacity-100"
-            title="Remove from Inventory"
-          >
-            <X size={14} />
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {columnId === 'stash' && feedingItem.stashedAt && (
+            <span className="text-[9px] font-mono text-purple-400/80 bg-purple-900/10 px-1.5 py-0.5 rounded border border-purple-500/20">
+              {formatTime(feedingItem.stashedAt)}
+            </span>
+          )}
+          {(columnId === 'inventory' || columnId === 'stash') && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemove([feedingItem.id]);
+              }}
+              className="p-1 text-neutral-600 hover:text-red-400 hover:bg-red-950/20 rounded transition-all opacity-0 group-hover:opacity-100"
+              title="Remove"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
       </div>
       
       {closestEdge === 'top' && (
@@ -615,6 +637,11 @@ const DraggableSubItem = React.memo(({ item, columnId, isSelected, onItemClick }
     });
   }, [item.id, columnId]);
 
+  const formatTime = (ts?: number) => {
+    if (!ts) return '';
+    return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  };
+
   return (
     <div
       ref={ref}
@@ -644,6 +671,11 @@ const DraggableSubItem = React.memo(({ item, columnId, isSelected, onItemClick }
           </span>
         </div>
       </div>
+      {columnId === 'stash' && item.stashedAt && (
+        <span className="text-[8px] font-mono text-purple-500/60">
+          {formatTime(item.stashedAt)}
+        </span>
+      )}
     </div>
   );
 });

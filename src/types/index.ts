@@ -47,12 +47,13 @@ export interface SolverResult {
   materials?: SolverMaterialItem[];
 }
 
-export type ColumnId = 'inventory' | 'feeder' | 'consumed';
+export type ColumnId = 'inventory' | 'feeder' | 'consumed' | 'stash';
 
 export interface FeedingItem {
   id: string;
   type: MaterialType;
   level: number;
+  stashedAt?: number;
 }
 
 export interface KanbanGroup {
@@ -60,6 +61,7 @@ export interface KanbanGroup {
   items: FeedingItem[];
   type: 'group';
   name?: string;
+  stashedAt?: number;
 }
 
 export type KanbanItem = FeedingItem | KanbanGroup;

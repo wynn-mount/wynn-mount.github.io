@@ -22,7 +22,7 @@ export function useKanbanSync() {
       const state = await db.kanbans.get(activeMountId);
       
       if (state) {
-        setData(state.data);
+        setData({ ...INITIAL_KANBAN_DATA, ...state.data });
       } else {
         // Initialize new kanban state for this mount
         const newState = { mountId: activeMountId, data: INITIAL_KANBAN_DATA };

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Zap, ChevronLeft, ChevronRight, Settings } from 'lucide-react';
+import { Plus, Zap, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useMountSync } from '../hooks/useMountSync';
 import { useMatrixSync } from '../hooks/useMatrixSync';
 import { useMountSolver } from '../hooks/useMountSolver'; // Custom hook for Worker logic
@@ -105,10 +105,6 @@ export function BentoMountManager() {
         totalPages={totalPages} 
         onPageChange={setCurrentPage}
         totalCount={mountsList.length}
-        onEditActive={() => {
-          const active = mountsList.find(m => m.id === activeMountId);
-          if (active) setEditingMount(active);
-        }}
       />
 
       {/* 4. Modals */}
@@ -199,7 +195,7 @@ function EmptyRows({ count }: { count: number }) {
   );
 }
 
-function ManagerFooter({ currentPage, totalPages, onPageChange, totalCount, onEditActive }: any) {
+function ManagerFooter({ currentPage, totalPages, onPageChange, totalCount }: any) {
   return (
     <div className="p-3 bg-neutral-900/40 border-t border-neutral-800 flex items-center justify-between h-[56px]">
       <div className="flex items-center gap-4">
@@ -226,14 +222,6 @@ function ManagerFooter({ currentPage, totalPages, onPageChange, totalCount, onEd
           Showing {totalCount > 0 ? totalCount : 0} mounts
         </div>
       </div>
-
-      <button 
-        onClick={onEditActive}
-        className="flex items-center gap-2 px-4 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white text-[10px] font-bold uppercase rounded border border-neutral-700 transition-all group"
-      >
-        <Settings size={14} className="group-hover:rotate-90 transition-transform duration-500" />
-        Settings
-      </button>
     </div>
   );
 }

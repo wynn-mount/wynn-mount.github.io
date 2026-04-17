@@ -17,6 +17,11 @@ export const INITIAL_KANBAN_DATA: Record<ColumnId, ColumnData> = {
     title: 'Consumed',
     items: [],
   },
+  stash: {
+    id: 'stash',
+    title: 'Stash',
+    items: [],
+  },
 };
 
 export interface InteractionState {

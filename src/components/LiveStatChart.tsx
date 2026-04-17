@@ -1,27 +1,20 @@
 import React, { useMemo, useCallback } from 'react';
 import { useAtomValue } from 'jotai';
-import { useLiveQuery } from 'dexie-react-hooks';
 import { motion, AnimatePresence } from 'framer-motion';
-import { db } from '../db';
-import { activeMountIdAtom } from '../store/mountStore';
-import { stagedMaterialsAtom, interactionStateAtom } from '../store/feedingStore';
+import { activeMountIdAtom, mountStatsAtom, isAppReadyAtom } from '../store/mountStore';
+import { stagedMaterialsAtom, interactionStateAtom, kanbanDataAtom, flattenItems } from '../store/feedingStore';
 import { activeMatrixDataAtom } from '../store/matrixStore';
 import { STAT_NAMES } from '../lib/constants';
 import { StatName, FeedingItem, ColumnId } from '../types';
 
 export function LiveStatChart() {
+  const isAppReady = useAtomValue(isAppReadyAtom);
   const activeMountId = useAtomValue(activeMountIdAtom);
+  const mountStats = useAtomValue(mountStatsAtom);
   const stagedMaterials = useAtomValue(stagedMaterialsAtom);
   const matrixData = useAtomValue(activeMatrixDataAtom);
   const interaction = useAtomValue(interactionStateAtom);
-
-  const activeMount = useLiveQuery(
-    async () => {
-      if (!activeMountId) return undefined;
-      return await db.mounts.get(activeMountId);
-    },
-    [activeMountId]
-  );
+  const kanbanData = useAtomValue(kanbanDataAtom);
 
   const calculateYields = useCallback((items: FeedingItem[]) => {
     const totals = STAT_NAMES.reduce((acc, stat) => {
@@ -41,10 +34,13 @@ export function LiveStatChart() {
     return totals;
   }, [matrixData]);
 
+  const consumedMaterials = useMemo(() => flattenItems(kanbanData.consumed.items), [kanbanData.consumed.items]);
+  const consumedYields = useMemo(() => calculateYields(consumedMaterials), [consumedMaterials, calculateYields]);
+  
   const stagedBuffs = useMemo(() => calculateYields(stagedMaterials), [stagedMaterials, calculateYields]);
   const interactionBuffs = useMemo(() => calculateYields(interaction.items), [interaction.items, calculateYields]);
 
-  if (!activeMount) {
+  if (!isAppReady || !activeMountId) {
     return (
       <div className="w-full h-[380px] bg-black border border-neutral-800 rounded-lg p-6 font-mono text-xs text-neutral-500 animate-pulse flex items-center justify-center">
         [ SELECT A MOUNT TO INITIALIZE LIVE CHART ]
@@ -78,27 +74,17 @@ export function LiveStatChart() {
 
       <div className="space-y-4">
         {STAT_NAMES.map((stat) => {
-          const limit = activeMount.stats[stat].limitLevel;
-          const max = activeMount.stats[stat].maxLevel;
+          const dbLimit = mountStats[stat].limitLevel;
+          const max = mountStats[stat].maxLevel;
           
-          let displayLimit = limit;
+          let displayLimit = dbLimit + consumedYields[stat];
           let displayBuff = stagedBuffs[stat];
-          let displaySelected = 0;
+          let displaySelected = interactionBuffs[stat];
 
-          if (interaction.items.length > 0) {
-            const intYield = interactionBuffs[stat];
-
-            if (interaction.columnId === 'inventory') {
-              displayBuff = intYield;
-              displaySelected = intYield; 
-            } else if (interaction.columnId === 'feeder') {
-              displayBuff = stagedBuffs[stat];
-              displaySelected = intYield;
-            } else if (interaction.columnId === 'consumed') {
-              displayBuff = 0;
-              displayLimit = limit;
-              displaySelected = intYield;
-            }
+          // For inventory interaction, we show a what-if preview where the inventory items 
+          // act as the sole buff for that stat to see their potential contribution.
+          if (interaction.columnId === 'inventory') {
+            displayBuff = displaySelected;
           }
 
           return (
@@ -121,7 +107,7 @@ export function LiveStatChart() {
           <div className="w-full h-px bg-neutral-800/40" />
         </div>
         <div className="flex flex-wrap gap-x-6 gap-y-2 font-mono text-[10px] uppercase">
-          <LegendItem color="bg-white" label="Limit" />
+          <LegendItem color="bg-white" label="Committed" />
           <LegendItem color="bg-[#3B82F666]" label="Buff" />
           <LegendItem color="bg-yellow-400/60" label="Selected" />
           <LegendItem color="bg-red-900" label="Threshold" />
@@ -151,51 +137,52 @@ interface StatProgressBarProps {
 }
 
 const StatProgressBar = React.memo(({ label, limit, max, buff, selected, interactionColumn }: StatProgressBarProps) => {
-  const currentTotal = limit + (interactionColumn === 'consumed' ? 0 : buff);
-  const isOverflow = currentTotal > max;
+  // Total value that defines the scale (Limit + Buff, or Limit + Interaction if Inventory)
+  const totalValue = interactionColumn === 'inventory' ? limit + selected : limit + buff;
+  const isOverflowing = totalValue > max;
   const visualMax = max;
 
-  const calculateWidth = (val: number) => (val / visualMax) * 100;
+  const OV_WIDTH = 8; // Fixed visual width percentage for the overflow zone
 
-  // Visual Total including protrusion (capped at 108% if overflowing)
-  const fullTotalWidthRaw = calculateWidth(currentTotal);
-  const displayTotalWidth = isOverflow ? 108 : fullTotalWidthRaw;
+  // The Scale function maps values to visual percentages
+  // 0-maxLevel maps to 0-100%
+  // Values above maxLevel map proportionally to the 100-108% range based on the total overflow
+  const Scale = (val: number) => {
+    if (val <= visualMax) return (val / visualMax) * 100;
+    if (!isOverflowing) return 100;
+    
+    const overflowVal = val - visualMax;
+    const totalOverflow = totalValue - visualMax;
+    const overflowRatio = overflowVal / totalOverflow;
+    return 100 + (overflowRatio * OV_WIDTH);
+  };
+
+  // 1. White Bar (Committed: Base + Consumed)
+  const whiteWidth = Scale(limit);
   
-  const fullLimitWidth = calculateWidth(limit);
+  // 2. Blue Bar (Buff: Planned Feeder Items)
+  // Blue sits between limit and totalValue
+  const blueWidth = Scale(totalValue) - Scale(limit);
+  const blueOffset = Scale(limit);
 
-  // Layering widths and offsets
-  let blueWidth = 0;
-  let blueOffset = 0;
+  // 3. Yellow Bar (Selected: Hover/Select Interaction)
   let yellowWidth = 0;
   let yellowOffset = 0;
-  let whiteWidth = fullLimitWidth;
 
-  if (interactionColumn === 'inventory') {
-    yellowWidth = displayTotalWidth - fullLimitWidth;
-    yellowOffset = fullLimitWidth;
-    blueWidth = 0;
-  } else if (interactionColumn === 'feeder') {
-    yellowWidth = calculateWidth(selected);
-    yellowOffset = fullLimitWidth;
-    
-    if (fullLimitWidth + yellowWidth > 100) {
-      // Yellow protrudes
-      yellowWidth = displayTotalWidth - fullLimitWidth;
-      blueWidth = 0;
-    } else {
-      // Blue protrudes
-      blueWidth = displayTotalWidth - (fullLimitWidth + yellowWidth);
-      blueOffset = fullLimitWidth + yellowWidth;
+  if (selected > 0) {
+    if (interactionColumn === 'inventory') {
+      // Inventory interaction adds to the top of the limit
+      yellowOffset = Scale(limit);
+      yellowWidth = Scale(limit + selected) - yellowOffset;
+    } else if (interactionColumn === 'feeder') {
+      // Feeder interaction is part of the buff, usually at the top
+      yellowOffset = Scale(totalValue - selected);
+      yellowWidth = Scale(totalValue) - yellowOffset;
+    } else if (interactionColumn === 'consumed' || interactionColumn === 'stash') {
+      // Consumed/Stash interaction is part of the committed base, at the top
+      yellowOffset = Scale(limit - selected);
+      yellowWidth = Scale(limit) - yellowOffset;
     }
-  } else if (interactionColumn === 'consumed') {
-    yellowWidth = calculateWidth(selected);
-    yellowOffset = fullLimitWidth - yellowWidth;
-    whiteWidth = fullLimitWidth - yellowWidth;
-    blueWidth = 0;
-  } else {
-    // Default mode (No Interaction)
-    blueWidth = displayTotalWidth - fullLimitWidth;
-    blueOffset = fullLimitWidth;
   }
 
   const transition = { type: 'tween', ease: 'easeInOut', duration: 0.2 };
@@ -209,11 +196,18 @@ const StatProgressBar = React.memo(({ label, limit, max, buff, selected, interac
       </div>
 
       <div className="flex-1 h-6 relative flex items-center pr-12">
-        {/* Progress Bar Container */}
         <div className="flex-1 h-full bg-neutral-950 border border-neutral-900 relative z-0">
           <div className="absolute inset-0 bg-[#1A1A1A] w-full" />
 
-          {/* Layer 1: Blue (Buff) */}
+          {/* Layer 1: White (Committed) - z-10 */}
+          <motion.div 
+            initial={false}
+            animate={{ width: `${whiteWidth}%` }}
+            transition={transition}
+            className="absolute left-0 top-0 h-full bg-white z-10"
+          />
+
+          {/* Layer 2: Blue (Buff) - z-20 */}
           {blueWidth > 0 && (
             <motion.div 
               initial={false}
@@ -222,11 +216,11 @@ const StatProgressBar = React.memo(({ label, limit, max, buff, selected, interac
                 left: `${blueOffset}%`
               }}
               transition={transition}
-              className="absolute top-0 h-full bg-[#3B82F666] z-0"
+              className="absolute top-0 h-full bg-[#3B82F666] z-20"
             />
           )}
 
-          {/* Layer 2: Yellow (Selection Highlight - Translucent) */}
+          {/* Layer 3: Yellow (Selection Highlight) - z-30 */}
           {yellowWidth > 0 && (
             <motion.div 
               initial={false}
@@ -235,40 +229,31 @@ const StatProgressBar = React.memo(({ label, limit, max, buff, selected, interac
                 left: `${yellowOffset}%`
               }}
               transition={transition}
-              className="absolute top-0 h-full bg-yellow-400/60 z-10"
+              className="absolute top-0 h-full bg-yellow-400/60 z-30"
             />
           )}
 
-          {/* Layer 3: Threshold Line (Dark Red, Taller, Thickened to 3px) */}
-          <div className="absolute left-full top-[-4px] bottom-[-4px] w-[3px] bg-red-900/80 z-20 pointer-events-none" />
-
-          {/* Layer 4: White (Limit) */}
-          <motion.div 
-            initial={false}
-            animate={{ width: `${whiteWidth}%` }}
-            transition={transition}
-            className="absolute left-0 top-0 h-full bg-white z-30"
-          />
+          {/* Layer 4: Threshold Line (Dark Red) - z-50 (Very front) */}
+          <div className="absolute left-full top-[-4px] bottom-[-4px] w-[3px] bg-red-900 z-50 pointer-events-none" />
         </div>
       </div>
 
-      {/* Numerical Column: Yellow Selection first, then Blue Buff in parentheses */}
       <div className="w-52 flex-shrink-0 ml-4 font-mono text-[11px] flex justify-end gap-2 items-baseline">
-        <span className={`${isOverflow ? 'text-red-500 font-bold' : (selected > 0 ? 'text-yellow-400' : 'text-white')}`}>
-          {currentTotal.toString().padStart(3, ' ')}
+        <span className={`${isOverflowing ? 'text-red-500 font-bold' : (selected > 0 ? 'text-yellow-400' : 'text-white')}`}>
+          {totalValue.toString().padStart(3, ' ')}
         </span>
         <span className="text-neutral-700">/</span>
         <span className="text-neutral-500">{max.toString().padStart(3, ' ')}</span>
         
         <div className="w-24 text-right flex justify-end gap-1">
-          {interactionColumn === 'feeder' ? (
+          {interactionColumn === 'feeder' || interactionColumn === 'inventory' ? (
             <>
               <span className="text-yellow-400 font-bold">+{selected}</span>
-              <span className="text-blue-400">({buff})</span>
+              {interactionColumn === 'feeder' && buff > selected && (
+                <span className="text-blue-400">({buff - selected})</span>
+              )}
             </>
-          ) : interactionColumn === 'inventory' ? (
-            <span className="text-yellow-400 font-bold">+{buff}</span>
-          ) : interactionColumn === 'consumed' && selected > 0 ? (
+          ) : (interactionColumn === 'consumed' || interactionColumn === 'stash') && selected > 0 ? (
             <span className="text-yellow-400 font-bold">+{selected}</span>
           ) : (
             <span className={`transition-colors ${buff > 0 ? 'text-blue-400' : 'text-neutral-800'}`}>
