@@ -10,9 +10,14 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@atlaskit/pragmatic-drag-and-drop": "^1.7.10",
+    "@atlaskit/pragmatic-drag-and-drop-flourish": "^2.0.14",
+    "@atlaskit/pragmatic-drag-and-drop-hitbox": "^1.1.0",
     "@fontsource/geist-mono": "^5.0.0",
     "@fontsource/geist-sans": "^5.0.0",
     "dexie": "^4.0.0",
+    "dexie-react-hooks": "^1.1.7",
+    "framer-motion": "^11.11.17",
     "javascript-lp-solver": "^0.4.24",
     "jotai": "^2.10.0",
     "lucide-react": "^1.8.0",

@@ -1,16 +1,23 @@
 import Dexie, { type Table } from 'dexie';
-import { MaterialPreset, SavedMount, MountStat, StatName } from '../types';
+import { MaterialPreset, SavedMount, MountStat, StatName, ColumnData, ColumnId } from '../types';
 import { STAT_NAMES } from '../lib/constants';
+
+export interface KanbanState {
+  mountId: number;
+  data: Record<ColumnId, ColumnData>;
+}
 
 export class MountDatabase extends Dexie {
   presets!: Table<MaterialPreset, number>;
   mounts!: Table<SavedMount, number>;
+  kanbans!: Table<KanbanState, number>;
 
   constructor() {
     super('MountDatabase');
     this.version(1).stores({
       presets: '++id, name',
       mounts: '++id, name',
+      kanbans: 'mountId',
     });
   }
 }

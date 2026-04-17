@@ -46,3 +46,26 @@ export interface SolverResult {
   totalMaterials?: number;
   materials?: SolverMaterialItem[];
 }
+
+export type ColumnId = 'inventory' | 'feeder' | 'consumed';
+
+export interface FeedingItem {
+  id: string;
+  type: MaterialType;
+  level: number;
+}
+
+export interface KanbanGroup {
+  id: string;
+  items: FeedingItem[];
+  type: 'group';
+  name?: string;
+}
+
+export type KanbanItem = FeedingItem | KanbanGroup;
+
+export interface ColumnData {
+  id: ColumnId;
+  title: string;
+  items: KanbanItem[];
+}

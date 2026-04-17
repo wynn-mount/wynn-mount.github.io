@@ -1,22 +1,71 @@
 import { useState } from 'react'
-import { useAtomValue } from 'jotai'
-import { isAppReadyAtom } from './store/mountStore'
+import { useAtomValue, useSetAtom } from 'jotai'
+import { isAppReadyAtom, isBulkModalOpenAtom } from './store/mountStore'
 import { BentoMountManager } from './components/BentoMountManager'
-import { Sidebar } from './components/Sidebar'
 import { MaterialMatrix } from './components/MaterialMatrix'
 import { ShoppingList } from './components/ShoppingList'
 import { BulkImportExportModal } from './components/BulkImportExportModal'
+import { FeedKanbanBoard } from './components/FeedKanbanBoard'
+import { LiveStatChart } from './components/LiveStatChart'
+import { Package } from 'lucide-react'
 
 function App() {
   const isAppReady = useAtomValue(isAppReadyAtom)
+  const setIsBulkModalOpen = useSetAtom(isBulkModalOpenAtom)
   const [activeTab, setActiveTab] = useState<'calculator' | 'matrix'>('calculator')
 
   return (
-    <div className="flex h-screen bg-black text-white overflow-hidden">
-      <Sidebar />
+    <div className="flex flex-col min-h-screen bg-black text-white">
       <BulkImportExportModal />
       
-      <div className="flex-1 overflow-y-auto p-8">
+      {/* Global Header */}
+      <header className="flex items-center justify-between px-8 py-4 border-b border-neutral-800 bg-black sticky top-0 z-50">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-white rounded-lg">
+            <Package size={20} className="text-black" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold tracking-tight">Wynn-Mount Optimizer</h1>
+            <p className="text-[10px] text-neutral-500 uppercase font-bold tracking-widest">Architect Edition</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-6">
+          <div className="flex gap-4">
+            <button 
+              onClick={() => setActiveTab('calculator')}
+              className={`text-sm font-medium pb-2 border-b-2 transition-colors ${
+                activeTab === 'calculator' 
+                  ? 'border-white text-white' 
+                  : 'border-transparent text-neutral-500 hover:text-neutral-300'
+              }`}
+            >
+              Calculator
+            </button>
+            <button 
+              onClick={() => setActiveTab('matrix')}
+              className={`text-sm font-medium pb-2 border-b-2 transition-colors ${
+                activeTab === 'matrix' 
+                  ? 'border-white text-white' 
+                  : 'border-transparent text-neutral-500 hover:text-neutral-300'
+              }`}
+            >
+              Material Matrix
+            </button>
+          </div>
+          
+          <div className="h-6 w-px bg-neutral-800 mx-2" />
+          
+          <button
+            onClick={() => setIsBulkModalOpen(true)}
+            className="px-4 py-2 bg-white text-black text-[10px] font-bold uppercase rounded hover:bg-neutral-200 transition-colors shadow-[0_0_15px_rgba(255,255,255,0.1)]"
+          >
+            Export / Import Mounts
+          </button>
+        </div>
+      </header>
+      
+      <div className="flex-1 p-8">
         {!isAppReady ? (
           <div className="w-full max-w-4xl mx-auto space-y-8 p-6 border border-neutral-800 rounded-md animate-pulse">
             <div className="h-8 bg-neutral-900 w-1/3 rounded"></div>
@@ -24,40 +73,30 @@ function App() {
             <div className="h-64 bg-neutral-900 w-full rounded"></div>
           </div>
         ) : (
-          <div className="max-w-5xl mx-auto">
-            <header className="mb-8 border-b border-neutral-800 pb-4">
-              <h1 className="text-2xl font-bold tracking-tight">Wynn-Mount Optimizer</h1>
-              <p className="text-sm text-neutral-400 mt-1">Optimize your materials based on your mount's levels</p>
-              
-              <div className="flex gap-4 mt-6">
-                <button 
-                  onClick={() => setActiveTab('calculator')}
-                  className={`text-sm font-medium pb-2 border-b-2 transition-colors ${
-                    activeTab === 'calculator' 
-                      ? 'border-white text-white' 
-                      : 'border-transparent text-neutral-500 hover:text-neutral-300'
-                  }`}
-                >
-                  Calculator
-                </button>
-                <button 
-                  onClick={() => setActiveTab('matrix')}
-                  className={`text-sm font-medium pb-2 border-b-2 transition-colors ${
-                    activeTab === 'matrix' 
-                      ? 'border-white text-white' 
-                      : 'border-transparent text-neutral-500 hover:text-neutral-300'
-                  }`}
-                >
-                  Material Matrix
-                </button>
-              </div>
-            </header>
-            
-            <main>
+          <div className="max-w-[1800px] mx-auto h-full">
+            <main className="h-full">
               {activeTab === 'calculator' ? (
-                <div className="space-y-8">
-                  <BentoMountManager />
-                  <ShoppingList />
+                <div className="flex flex-col lg:flex-row gap-8 items-start h-full">
+                  {/* Left Column: Mount Configuration & Material List */}
+                  <div className="flex-1 flex flex-col gap-8 order-1 lg:order-1 w-full lg:w-1/2">
+                    <div className="min-h-0">
+                      <BentoMountManager />
+                    </div>
+                    <div className="min-h-0">
+                      <ShoppingList />
+                    </div>
+                  </div>
+                  
+                  {/* Right Column: Live Stat Progress & Feeding Kanban */}
+                  <div className="flex-1 flex flex-col gap-8 order-2 lg:order-2 w-full lg:w-1/2 self-stretch">
+                    <div className="min-h-0">
+                      <LiveStatChart />
+                    </div>
+                    {/* Kanban Board takes up remaining space */}
+                    <div className="min-h-0 flex-1">
+                      <FeedKanbanBoard />
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <MaterialMatrix />
