@@ -1,11 +1,11 @@
 import React from 'react';
 import { useAtom, useAtomValue } from 'jotai';
-import { isCalculatingAtom, solverResultAtom } from '../store/mountStore';
-import { kanbanDataAtom } from '../store/feedingStore';
-import { getMaterialName } from '../lib/constants';
-import { Icon } from './Icon';
+import { isCalculatingAtom, solverResultAtom } from '../../store/mountStore';
+import { kanbanDataAtom } from '../../store/feedingStore';
+import { getMaterialName } from '../../lib/constants';
+import { Icon } from '../util/Icon';
 import { Plus } from 'lucide-react';
-import { FeedingItem, SolverMaterialItem, KanbanGroup, KanbanItem, MaterialType } from '../types';
+import { FeedingItem, SolverMaterialItem, KanbanGroup } from '../../types';
 
 export function ShoppingList() {
   const isCalculating = useAtomValue(isCalculatingAtom);
@@ -65,7 +65,7 @@ export function ShoppingList() {
   if (isCalculating) {
     return (
       <div className="w-full h-full min-h-[400px] bg-black border border-neutral-800 rounded-lg flex flex-col items-center justify-center space-y-4 shadow-2xl">
-        <div className="w-8 h-8 border-4 border-neutral-800 border-t-white rounded-full animate-spin"></div>
+        <div className="size-8 border-4 border-neutral-800 border-t-white rounded-full animate-spin"></div>
         <p className="text-neutral-400 text-xs font-mono uppercase tracking-widest">Optimizing Yields...</p>
       </div>
     );
@@ -107,7 +107,7 @@ export function ShoppingList() {
           <h2 className="text-sm font-bold tracking-widest uppercase text-green-500">Optimization Complete</h2>
           <div className="w-full h-px bg-green-900/20" />
         </div>
-        <div className="mt-8 p-4 bg-green-950/10 border border-green-900/20 rounded font-mono text-xs text-green-400">
+        <div className="mt-8 p-4 bg-green-950/10 border border-green-900/20 rounded font-mono text-xs text-red-400">
           <p>[ STATUS: ALL TARGETS MET ]</p>
           <p className="mt-4 opacity-70">No additional materials required for current configuration.</p>
         </div>

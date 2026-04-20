@@ -77,6 +77,18 @@ export function useKanbanMonitor() {
           const allSourceFlatItems = flattenItems(prev[sourceColumnId].items);
           const movedFeedingItems = allSourceFlatItems.filter(item => draggedItemIds.includes(item.id));
 
+          const movedStructuredItems: KanbanItem[] = [];
+          prev[sourceColumnId].items.forEach(item => {
+            if ('type' in item && item.type === 'group') {
+              const matching = item.items.filter(i => draggedItemIds.includes(i.id));
+              if (matching.length > 0) {
+                movedStructuredItems.push({ ...item, items: matching });
+              }
+            } else if (draggedItemIds.includes(item.id)) {
+              movedStructuredItems.push(item);
+            }
+          });
+
           // 2. STAT COMMITMENT LOGIC (Optimistic)
           if (activeMountId) {
             const yields = calculateYields(movedFeedingItems);
@@ -109,11 +121,27 @@ export function useKanbanMonitor() {
 
           // 4. PREPARE STAMPED ITEMS (if entering stash)
           const now = Date.now();
-          const itemsToInsert = movedFeedingItems.map(item => {
-            if (destinationColumnId === 'stash') return { ...item, stashedAt: item.stashedAt || now };
-            const { stashedAt, ...rest } = item;
-            return rest;
+          const itemsToInsert = movedStructuredItems.map(item => {
+            if ('type' in item && item.type === 'group') {
+              const stashedItems = item.items.map(sub => {
+                 if (destinationColumnId === 'stash') return { ...sub, stashedAt: sub.stashedAt || now };
+                 const { stashedAt, ...rest } = sub;
+                 return rest as FeedingItem;
+              });
+              const groupStashedAt = destinationColumnId === 'stash' ? (item.stashedAt || now) : undefined;
+              if (destinationColumnId === 'stash') {
+                return { ...item, items: stashedItems, stashedAt: groupStashedAt } as KanbanGroup;
+              } else {
+                const { stashedAt, ...restGroup } = item;
+                return { ...restGroup, items: stashedItems } as KanbanGroup;
+              }
+            } else {
+               if (destinationColumnId === 'stash') return { ...item, stashedAt: item.stashedAt || now } as FeedingItem;
+               const { stashedAt, ...rest } = item as FeedingItem;
+               return rest as FeedingItem;
+            }
           });
+          const flatItemsToInsert = flattenItems(itemsToInsert);
 
           // 5. GROUPING LOGIC
           if (isGroupTarget && destinationItemData) {
@@ -125,7 +153,7 @@ export function useKanbanMonitor() {
                 if ('type' in targetItem && targetItem.type === 'group') {
                   destItems[targetIdx] = {
                     ...targetItem,
-                    items: [...targetItem.items, ...itemsToInsert],
+                    items: [...targetItem.items, ...flatItemsToInsert],
                     stashedAt: destinationColumnId === 'stash' ? (targetItem.stashedAt || now) : undefined
                   };
                 } else {
@@ -133,7 +161,7 @@ export function useKanbanMonitor() {
                     id: crypto.randomUUID(),
                     type: 'group',
                     name: 'Batch',
-                    items: [targetItem as FeedingItem, ...itemsToInsert],
+                    items: [targetItem as FeedingItem, ...flatItemsToInsert],
                     stashedAt: destinationColumnId === 'stash' ? now : undefined
                   };
                 }
@@ -154,23 +182,7 @@ export function useKanbanMonitor() {
             }
           }
 
-          const originalItem = prev[sourceColumnId].items.find(i => i.id === sourceItemId);
-          if (originalItem && 'type' in originalItem && originalItem.type === 'group') {
-             const isFullGroupDrag = draggedItemIds.length === originalItem.items.length;
-             if (isFullGroupDrag) {
-                const groupToInsert = { ...originalItem, items: itemsToInsert };
-                if (destinationColumnId === 'stash') {
-                  groupToInsert.stashedAt = groupToInsert.stashedAt || now;
-                } else {
-                  delete groupToInsert.stashedAt;
-                }
-                destItems.splice(insertIndex, 0, groupToInsert);
-             } else {
-                destItems.splice(insertIndex, 0, ...itemsToInsert);
-             }
-          } else {
-             destItems.splice(insertIndex, 0, ...itemsToInsert);
-          }
+          destItems.splice(insertIndex, 0, ...itemsToInsert);
 
           return nextData as Record<ColumnId, any>;
         });

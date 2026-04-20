@@ -1,7 +1,7 @@
 import React from 'react';
-import { MaterialType } from '../types';
-import { ICON_SIZE, MATERIAL_ICON_MAP } from '../lib/constants';
-import spriteSheet from '../assets/ProfessionIcon.webp';
+import { MaterialType } from '../../types';
+import { ICON_SIZE, MATERIAL_ICON_MAP } from '../../lib/constants';
+import spriteSheet from '../../assets/ProfessionIcon.webp';
 
 interface IconProps {
   type: MaterialType;

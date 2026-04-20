@@ -1,19 +1,19 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { useAtom } from 'jotai';
-import { activeLevelTabAtom } from '../store/matrixStore';
-import { useMatrixSync } from '../hooks/useMatrixSync';
-import { MATERIAL_LEVELS, MATERIAL_TYPES, STAT_NAMES, getMaterialName, VALID_STATS_PER_MATERIAL, STAT_COLORS } from '../lib/constants';
-import { MaterialType, StatName } from '../types';
-import { Icon } from './Icon';
-import { IconDebugger } from './IconDebugger';
+import { activeLevelTabAtom } from '../../store/matrixStore';
+import { useMatrixSync } from '../../hooks/useMatrixSync';
+import { MATERIAL_LEVELS, MATERIAL_TYPES, STAT_NAMES, getMaterialName, VALID_STATS_PER_MATERIAL, STAT_COLORS } from '../../lib/constants';
+import { MaterialType, StatName } from '../../types';
+import { Icon } from '../util/Icon';
+import { IconDebugger } from '../util/IconDebugger';
 
 export function MaterialMatrix() {
   const { matrixData, setMatrixData, isMatrixReady } = useMatrixSync();
   const [activeLevel, setActiveLevel] = useAtom(activeLevelTabAtom);
 
-  const levelData = useMemo(() => matrixData[activeLevel.toString()] || {}, [matrixData, activeLevel]);
+  const levelData = matrixData[activeLevel.toString()] || {};
 
-  const validationErrors = useMemo(() => {
+  const calculateValidationErrors = () => {
     if (!isMatrixReady) return [];
     
     const errors: string[] = [];
@@ -48,7 +48,9 @@ export function MaterialMatrix() {
     }
 
     return errors;
-  }, [levelData, isMatrixReady]);
+  };
+
+  const validationErrors = calculateValidationErrors();
 
   if (!isMatrixReady) {
     return (
@@ -137,7 +139,7 @@ export function MaterialMatrix() {
       {validationErrors.length > 0 ? (
         <div className="p-4 border border-red-900 bg-red-950/20 rounded-md text-red-400 text-sm space-y-2">
           <p className="font-bold flex items-center gap-2">
-            <span className="w-2 h-2 bg-red-500 rounded-full inline-block"></span>
+            <span className="size-2 bg-red-500 rounded-full inline-block"></span>
             Validation Errors Detected
           </p>
           <ul className="list-disc pl-5 space-y-1">
@@ -148,7 +150,7 @@ export function MaterialMatrix() {
         </div>
       ) : (
         <div className="p-3 border border-green-900 bg-green-950/20 rounded-md text-green-400 text-sm flex items-center gap-2">
-          <span className="w-2 h-2 bg-green-500 rounded-full inline-block"></span>
+          <span className="size-2 bg-green-500 rounded-full inline-block"></span>
           All rules satisfied for Level {activeLevel}.
         </div>
       )}

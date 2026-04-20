@@ -1,10 +1,10 @@
 import React, { useState, useRef } from 'react';
 import { useAtom } from 'jotai';
-import { isBulkModalOpenAtom, bulkModalTabAtom } from '../store/mountStore';
-import { useMountSync } from '../hooks/useMountSync';
-import { decodeAllMounts, validateMountJson, encodeAllMounts } from '../lib/codec';
-import { STAT_NAMES } from '../lib/constants';
-import { SavedMount } from '../types';
+import { isBulkModalOpenAtom, bulkModalTabAtom } from '../../store/mountStore';
+import { useMountSync } from '../../hooks/useMountSync';
+import { decodeAllMounts, validateMountJson, encodeAllMounts } from '../../lib/codec';
+import { STAT_NAMES } from '../../lib/constants';
+import { SavedMount } from '../../types';
 import { X, Upload, FileText, Check, AlertCircle, Copy, Download } from 'lucide-react';
 
 export function BulkImportExportModal() {
@@ -285,7 +285,7 @@ export function BulkImportExportModal() {
               </div>
 
               <div className="p-4 border border-neutral-800 rounded bg-neutral-900/10 flex items-center gap-4">
-                <div className="w-10 h-10 rounded-full bg-neutral-900 flex items-center justify-center shrink-0">
+                <div className="size-10 rounded-full bg-neutral-900 flex items-center justify-center shrink-0">
                    <AlertCircle size={20} className="text-neutral-500" />
                 </div>
                 <div>

@@ -1,11 +1,11 @@
-import React, { useMemo, useCallback } from 'react';
+import React from 'react';
 import { useAtomValue } from 'jotai';
 import { motion, AnimatePresence } from 'framer-motion';
-import { activeMountIdAtom, mountStatsAtom, isAppReadyAtom } from '../store/mountStore';
-import { stagedMaterialsAtom, interactionStateAtom, kanbanDataAtom, flattenItems } from '../store/feedingStore';
-import { activeMatrixDataAtom } from '../store/matrixStore';
-import { STAT_NAMES } from '../lib/constants';
-import { StatName, FeedingItem, ColumnId } from '../types';
+import { activeMountIdAtom, mountStatsAtom, isAppReadyAtom } from '../../store/mountStore';
+import { stagedMaterialsAtom, interactionStateAtom, kanbanDataAtom, flattenItems } from '../../store/feedingStore';
+import { activeMatrixDataAtom } from '../../store/matrixStore';
+import { STAT_NAMES } from '../../lib/constants';
+import { StatName, FeedingItem, ColumnId } from '../../types';
 
 export function LiveStatChart() {
   const isAppReady = useAtomValue(isAppReadyAtom);
@@ -16,7 +16,7 @@ export function LiveStatChart() {
   const interaction = useAtomValue(interactionStateAtom);
   const kanbanData = useAtomValue(kanbanDataAtom);
 
-  const calculateYields = useCallback((items: FeedingItem[]) => {
+  const calculateYields = (items: FeedingItem[]) => {
     const totals = STAT_NAMES.reduce((acc, stat) => {
       acc[stat] = 0;
       return acc;
@@ -32,13 +32,13 @@ export function LiveStatChart() {
     });
 
     return totals;
-  }, [matrixData]);
+  };
 
-  const consumedMaterials = useMemo(() => flattenItems(kanbanData.consumed.items), [kanbanData.consumed.items]);
-  const consumedYields = useMemo(() => calculateYields(consumedMaterials), [consumedMaterials, calculateYields]);
+  const consumedMaterials = flattenItems(kanbanData.consumed.items);
+  const consumedYields = calculateYields(consumedMaterials);
   
-  const stagedBuffs = useMemo(() => calculateYields(stagedMaterials), [stagedMaterials, calculateYields]);
-  const interactionBuffs = useMemo(() => calculateYields(interaction.items), [interaction.items, calculateYields]);
+  const stagedBuffs = calculateYields(stagedMaterials);
+  const interactionBuffs = calculateYields(interaction.items);
 
   if (!isAppReady || !activeMountId) {
     return (
@@ -81,8 +81,6 @@ export function LiveStatChart() {
           let displayBuff = stagedBuffs[stat];
           let displaySelected = interactionBuffs[stat];
 
-          // For inventory interaction, we show a what-if preview where the inventory items 
-          // act as the sole buff for that stat to see their potential contribution.
           if (interaction.columnId === 'inventory') {
             displayBuff = displaySelected;
           }
@@ -121,7 +119,7 @@ export function LiveStatChart() {
 function LegendItem({ color, label }: { color: string, label: string }) {
   return (
     <div className="flex items-center gap-2">
-      <div className={`w-3 h-3 ${color}`} />
+      <div className={`size-3 ${color}`} />
       <span className="text-neutral-400">{label}</span>
     </div>
   );
@@ -136,7 +134,7 @@ interface StatProgressBarProps {
   interactionColumn: ColumnId | null;
 }
 
-const StatProgressBar = React.memo(({ label, limit, max, buff, selected, interactionColumn }: StatProgressBarProps) => {
+function StatProgressBar({ label, limit, max, buff, selected, interactionColumn }: StatProgressBarProps) {
   // Total value that defines the scale (Limit + Buff, or Limit + Interaction if Inventory)
   const totalValue = interactionColumn === 'inventory' ? limit + selected : limit + buff;
   const isOverflowing = totalValue > max;
@@ -264,4 +262,4 @@ const StatProgressBar = React.memo(({ label, limit, max, buff, selected, interac
       </div>
     </div>
   );
-});
+}

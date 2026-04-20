@@ -1,7 +1,7 @@
 import React from 'react';
-import { MATERIAL_TYPES, MATERIAL_LEVELS, getMaterialName } from '../lib/constants';
+import { MATERIAL_TYPES, MATERIAL_LEVELS, getMaterialName } from '../../lib/constants';
 import { Icon } from './Icon';
-import { MaterialType } from '../types';
+import { MaterialType } from '../../types';
 
 export function IconDebugger() {
   return (
@@ -26,7 +26,7 @@ export function IconDebugger() {
                   key={`${type}-${level}`} 
                   className="flex flex-col items-center p-3 bg-black border border-neutral-900 rounded hover:border-neutral-700 transition-colors group"
                 >
-                  <div className="mb-3 bg-neutral-900/50 p-2 rounded group-hover:bg-neutral-800 transition-colors flex items-center justify-center w-12 h-12 overflow-hidden">
+                  <div className="mb-3 bg-neutral-900/50 p-2 rounded group-hover:bg-neutral-800 transition-colors flex items-center justify-center size-12 overflow-hidden">
                     <Icon type={type as MaterialType} level={level} scale={1.25} />
                   </div>
                   <div className="text-center w-full">

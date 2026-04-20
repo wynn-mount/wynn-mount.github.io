@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Zap, ChevronLeft, ChevronRight } from 'lucide-react';
-import { useMountSync } from '../hooks/useMountSync';
-import { useMatrixSync } from '../hooks/useMatrixSync';
-import { useMountSolver } from '../hooks/useMountSolver'; // Custom hook for Worker logic
-import { STAT_NAMES, STAT_COLORS } from '../lib/constants';
-import { SavedMount, StatName } from '../types';
+import { useMountSync } from '../../hooks/useMountSync';
+import { useMatrixSync } from '../../hooks/useMatrixSync';
+import { useMountSolver } from '../../hooks/useMountSolver'; // Custom hook for Worker logic
+import { STAT_NAMES, STAT_COLORS } from '../../lib/constants';
+import { SavedMount, StatName } from '../../types';
 
 import { MountRow } from './MountRow';
 import { MountForm } from './MountForm';
@@ -24,9 +24,7 @@ export function BentoMountManager() {
   const { matrixData } = useMatrixSync();
   const { isCalculating, runSolver } = useMountSolver();
 
-  const activeMount = useMemo(() => {
-    return mountsList.find(m => m.id === activeMountId);
-  }, [mountsList, activeMountId]);
+  const activeMount = mountsList.find(m => m.id === activeMountId);
 
   // Auto-solve Effect
   useEffect(() => {
@@ -39,14 +37,20 @@ export function BentoMountManager() {
   }, [activeMount, matrixData, runSolver]);
 
   // State
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(() => {
+    const saved = localStorage.getItem('mountManagerPage');
+    return saved ? parseInt(saved, 10) : 1;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('mountManagerPage', currentPage.toString());
+  }, [currentPage]);
+
   const [editingMount, setEditingMount] = useState<SavedMount | null>(null);
 
   // Pagination Logic
   const totalPages = Math.ceil(mountsList.length / PAGE_SIZE);
-  const paginatedMounts = useMemo(() => {
-    return mountsList.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
-  }, [mountsList, currentPage]);
+  const paginatedMounts = mountsList.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   useEffect(() => {
     if (currentPage > totalPages && totalPages > 0) {
@@ -67,6 +71,46 @@ export function BentoMountManager() {
     updateAnyMount(mount.id!, { stats: updatedStats });
   };
 
+  const handleGridKeyDown = (e: React.KeyboardEvent<HTMLTableSectionElement>) => {
+    const target = e.target as HTMLElement;
+    if (target.tagName !== 'INPUT' || !target.hasAttribute('data-mount-input')) return;
+
+    const row = parseInt(target.getAttribute('data-row') || '0', 10);
+    const col = parseInt(target.getAttribute('data-col') || '0', 10);
+    const tbody = e.currentTarget;
+
+    const findAndFocus = (r: number, c: number) => {
+      const el = tbody.querySelector(`input[data-row="${r}"][data-col="${c}"]`) as HTMLInputElement;
+      if (el) {
+        el.focus();
+        return true;
+      }
+      return false;
+    };
+
+    if (e.key === 'ArrowRight' || (e.key === 'Tab' && !e.shiftKey)) {
+      e.preventDefault();
+      // Try next column in same row
+      if (!findAndFocus(row, col + 1)) {
+        // Try first column of next row
+        findAndFocus(row + 1, 0) || findAndFocus(row + 1, 1);
+      }
+    } else if (e.key === 'ArrowLeft' || (e.key === 'Tab' && e.shiftKey)) {
+      e.preventDefault();
+      // Try prev column in same row
+      if (!findAndFocus(row, col - 1)) {
+        // Try last column of prev row
+        findAndFocus(row - 1, 6);
+      }
+    } else if (e.key === 'ArrowDown' || e.key === 'Enter') {
+      e.preventDefault();
+      findAndFocus(row + 1, col) || findAndFocus(row + 1, Math.max(1, col));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      findAndFocus(row - 1, col) || findAndFocus(row - 1, Math.max(1, col));
+    }
+  };
+
   return (
     <div className="w-full h-full min-h-[500px] bg-black border border-neutral-800 rounded-lg overflow-hidden flex flex-col shadow-2xl">
       
@@ -80,11 +124,12 @@ export function BentoMountManager() {
       <div className="flex-1 overflow-hidden bg-black">
         <table className="w-full text-left border-collapse table-fixed">
           <TableHeader />
-          <tbody className="divide-y divide-neutral-800">
-            {paginatedMounts.map((mount) => (
+          <tbody className="divide-y divide-neutral-800" onKeyDown={handleGridKeyDown}>
+            {paginatedMounts.map((mount, idx) => (
               <MountRow 
                 key={mount.id}
                 mount={mount}
+                rowIndex={idx}
                 onRename={(name) => renameMount(mount.id!, name)}
                 onUpdateLevel={(val) => updateAnyMount(mount.id!, { currentLevel: parseInt(val, 10) || 0 })}
                 onUpdateStat={(stat, field, val) => handleStatChange(mount, stat, field, val)}

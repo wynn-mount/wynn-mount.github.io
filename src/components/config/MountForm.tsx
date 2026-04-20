@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { SavedMount, StatName, MountStat } from '../types';
-import { STAT_NAMES, STAT_COLORS } from '../lib/constants';
+import { SavedMount, StatName, MountStat } from '../../types';
+import { STAT_NAMES, STAT_COLORS } from '../../lib/constants';
 import { X, Save, Copy, Check } from 'lucide-react';
-import { encodeMountData, decodeMountData } from '../lib/codec';
+import { encodeMountData, decodeMountData } from '../../lib/codec';
 
 interface MountFormProps {
   mount: SavedMount;
