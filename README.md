@@ -80,4 +80,4 @@ bun run preview
 - **Undo/Redo System**: Adding robust history tracking for complex feeding sessions.
 
 ## License
-This project is open-source and distributed under the **MIT License**. See the `LICENSE` file for more information. Feel free to fork, modify, and contribute!
+This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
