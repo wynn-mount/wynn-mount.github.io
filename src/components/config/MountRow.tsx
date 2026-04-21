@@ -62,15 +62,15 @@ export function MountRow({
                         />
                     </td>
                 ))}
-                <td rowSpan={2} className="p-3 align-middle">
-                    <div className="flex items-center justify-center">
+                <td rowSpan={2} className="p-1 align-middle">
+                    <div className="flex flex-col items-center justify-center gap-1">
                         {/* 1. Settings Action */}
                         <button
                             onClick={(e) => { e.stopPropagation(); onEdit(); }}
                             title="Settings"
-                            className="p-2 text-neutral-600 hover:text-white hover:bg-neutral-800 rounded transition-colors"
+                            className="p-1.5 text-neutral-600 hover:text-white hover:bg-neutral-800 rounded transition-colors"
                         >
-                            <Settings size={16} strokeWidth={2} />
+                            <Settings size={14} strokeWidth={2} />
                         </button>
 
                         {/* 2. Delete Action */}
@@ -78,9 +78,9 @@ export function MountRow({
                             <button
                                 onClick={(e) => { e.stopPropagation(); onRemove(); }}
                                 title="Remove Mount"
-                                className="p-2 text-neutral-800 hover:text-red-500 hover:bg-red-950/20 rounded transition-colors"
+                                className="p-1.5 text-neutral-800 hover:text-red-500 hover:bg-red-950/20 rounded transition-colors"
                             >
-                                <Trash2 size={16} strokeWidth={2} />
+                                <Trash2 size={14} strokeWidth={2} />
                             </button>
                         )}
                     </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Zap, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Zap, ChevronLeft, ChevronRight, Settings2 } from 'lucide-react';
 import { useMountSync } from '../../hooks/useMountSync';
 import { useMatrixSync } from '../../hooks/useMatrixSync';
 import { useMountSolver } from '../../hooks/useMountSolver'; // Custom hook for Worker logic
@@ -198,17 +198,21 @@ function TableHeader() {
         
         {/* Fixed-width columns for small data */}
         <th className="p-3 border-r border-neutral-800 w-[10%]">Highest Lvl</th>
-        <th className="p-3 border-r border-neutral-800 w-[60px] text-center">Type</th>
+        <th className="p-3 border-r border-neutral-800 w-[60px]">Type</th>
         
         {/* Stats scale equally */}
         {STAT_NAMES.map(stat => (
-          <th key={stat} className={`p-3 border-r border-neutral-800 text-center capitalize w-[8%] ${STAT_COLORS[stat].text} ${STAT_COLORS[stat].bg}`}>
+          <th key={stat} className={`p-3 border-r border-neutral-800 text-left truncate w-[8%] ${STAT_COLORS[stat].text} ${STAT_COLORS[stat].bg}`} title={stat}>
             {stat}
           </th>
         ))}
         
-        {/* Actions stay slightly wider for buttons */}
-        <th className="p-3 text-center w-[100px]">Actions</th>
+        {/* Actions column */}
+        <th className="p-1 w-[36px]">
+          <div className="flex justify-center">
+            <Settings2 size={14} className="text-neutral-500" />
+          </div>
+        </th>
       </tr>
     </thead>
   );
@@ -226,7 +230,7 @@ function EmptyRows({ count }: { count: number }) {
             {STAT_NAMES.map(stat => (
               <td key={`e1-${stat}-${i}`} className="p-2 border-r border-neutral-800"></td>
             ))}
-            <td rowSpan={2} className="p-3"></td>
+            <td rowSpan={2} className="p-1"></td>
           </tr>
           <tr className="h-[40px] border-b border-neutral-800/50">
             <td className="p-1 border-r border-neutral-800 bg-neutral-900/5"></td>
